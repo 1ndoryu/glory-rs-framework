@@ -1,0 +1,240 @@
+/* Glory-rs Framework: Sistema de estilos para componentes UI atomicos.
+ * Requiere variables CSS del proyecto consumidor:
+ *   --colorAccento, --colorSecundario, --colorPeligro, --colorExito,
+ *   --colorTexto, --colorFondo, --colorFondoPanel, --colorBorde,
+ *   --radio, --transicion */
+
+/* === BOTON === */
+
+.boton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  font-weight: 500;
+  border: 1px solid transparent;
+  border-radius: var(--radio);
+  cursor: pointer;
+  transition: var(--transicion);
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.boton:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Tamanos boton */
+.botonSm {
+  padding: 0.35rem 0.75rem;
+  font-size: 0.8rem;
+}
+
+.botonMd {
+  padding: 0.55rem 1.1rem;
+  font-size: 0.9rem;
+}
+
+.botonLg {
+  padding: 0.75rem 1.5rem;
+  font-size: 1rem;
+}
+
+/* Variantes boton */
+.botonPrimario {
+  background-color: var(--colorAccento);
+  color: #fff;
+}
+
+.botonPrimario:hover:not(:disabled) {
+  background-color: var(--colorSecundario);
+}
+
+.botonSecundario {
+  background-color: transparent;
+  color: var(--colorAccento);
+  border-color: var(--colorAccento);
+}
+
+.botonSecundario:hover:not(:disabled) {
+  background-color: var(--colorAccento);
+  color: #fff;
+}
+
+.botonPeligro {
+  background-color: var(--colorPeligro);
+  color: #fff;
+}
+
+.botonPeligro:hover:not(:disabled) {
+  background-color: #c0392b;
+}
+
+.botonExito {
+  background-color: var(--colorExito);
+  color: #fff;
+}
+
+.botonExito:hover:not(:disabled) {
+  background-color: #00a381;
+}
+
+.botonFantasma {
+  background-color: transparent;
+  color: var(--colorTexto);
+}
+
+.botonFantasma:hover:not(:disabled) {
+  background-color: var(--colorFondo);
+}
+
+.botonAncho {
+  width: 100%;
+}
+
+.botonCargando {
+  position: relative;
+  color: transparent;
+  pointer-events: none;
+}
+
+.botonCargando::after {
+  content: '';
+  position: absolute;
+  width: 1em;
+  height: 1em;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: girar 0.6s linear infinite;
+}
+
+@keyframes girar {
+  to { transform: rotate(360deg); }
+}
+
+/* === CAMPO (wrapper para Input, Select, Textarea) === */
+
+.campo {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.campoEtiqueta {
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: var(--colorTexto);
+}
+
+.campoEntrada {
+  border: 1px solid var(--colorBorde);
+  border-radius: var(--radio);
+  outline: none;
+  transition: var(--transicion);
+  width: 100%;
+  font-family: inherit;
+}
+
+.campoEntrada:focus {
+  border-color: var(--colorAccento);
+  box-shadow: 0 0 0 3px rgba(15, 52, 96, 0.1);
+}
+
+/* Tamanos campo */
+.campoSm {
+  padding: 0.35rem 0.6rem;
+  font-size: 0.8rem;
+}
+
+.campoMd {
+  padding: 0.55rem 0.8rem;
+  font-size: 0.9rem;
+}
+
+.campoLg {
+  padding: 0.7rem 1rem;
+  font-size: 1rem;
+}
+
+/* Error */
+.campoError .campoEntrada {
+  border-color: var(--colorPeligro);
+}
+
+.campoError .campoEntrada:focus {
+  box-shadow: 0 0 0 3px rgba(214, 48, 49, 0.1);
+}
+
+.campoMensajeError {
+  font-size: 0.78rem;
+  color: var(--colorPeligro);
+}
+
+/* === MODAL === */
+
+.modalOverlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 1rem;
+  animation: aparecer 0.15s ease;
+}
+
+@keyframes aparecer {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.modalContenido {
+  background: var(--colorFondoPanel);
+  border-radius: calc(var(--radio) * 1.5);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
+  width: 100%;
+  max-width: 560px;
+  max-height: 90vh;
+  overflow-y: auto;
+  animation: deslizar 0.2s ease;
+}
+
+@keyframes deslizar {
+  from { transform: translateY(10px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+.modalCabecera {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1.25rem 1.5rem;
+  border-bottom: 1px solid var(--colorBorde);
+}
+
+.modalTitulo {
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: var(--colorTexto);
+}
+
+.modalCuerpo {
+  padding: 1.5rem;
+}
+
+/* Responsive modal */
+@media (max-width: 640px) {
+  .modalContenido {
+    max-width: 100%;
+    border-radius: var(--radio) var(--radio) 0 0;
+    margin-top: auto;
+  }
+  
+  .modalOverlay {
+    align-items: flex-end;
+    padding: 0;
+  }
+}
