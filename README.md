@@ -9,7 +9,7 @@ Crate `glory-backend` en `backend/` con módulos genéricos para web apps:
 | Módulo | Descripción |
 |--------|-------------|
 | `errors` | AppError enum → HTTP status + JSON response |
-| `config` | AppConfig + SmtpConfig desde variables de entorno |
+| `config` | AppConfig + SmtpConfig desde variables de entorno (incluye error_report_email opcional) |
 
 ### Uso como dependencia
 
