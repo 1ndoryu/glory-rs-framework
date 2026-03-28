@@ -1,8 +1,26 @@
 # Glory-rs Framework
 
-Mini framework interno con componentes UI atomicos y estilos reutilizables para proyectos React + TypeScript.
+Framework interno reutilizable con componentes UI atómicos (React) y módulos backend fundacionales (Rust/Axum).
 
-## Componentes UI
+## Backend (Rust)
+
+Crate `glory-backend` en `backend/` con módulos genéricos para web apps:
+
+| Módulo | Descripción |
+|--------|-------------|
+| `errors` | AppError enum → HTTP status + JSON response |
+| `config` | AppConfig + SmtpConfig desde variables de entorno |
+
+### Uso como dependencia
+
+```toml
+[dependencies]
+glory-backend = { path = "glory-rs/backend" }
+```
+
+## Frontend (React + TypeScript)
+
+### Componentes UI
 
 | Componente | Descripcion |
 |------------|-------------|

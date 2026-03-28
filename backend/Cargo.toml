@@ -1,0 +1,32 @@
+[package]
+name = "glory-backend"
+version = "0.1.0"
+edition = "2021"
+description = "Glory Framework — Backend foundation for web apps (Axum + SQLx + JWT)"
+license = "MIT"
+authors = ["1ndoryu"]
+
+[dependencies]
+# Web framework
+axum = { version = "0.7", features = ["macros"] }
+tokio = { version = "1", features = ["full"] }
+
+# Serialization
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# Database
+sqlx = { version = "0.8", features = ["runtime-tokio", "tls-rustls", "postgres", "uuid", "chrono"] }
+
+# OpenAPI
+utoipa = { version = "4", features = ["axum_extras", "uuid", "chrono"] }
+
+# Error handling
+thiserror = "2"
+
+# Logging
+tracing = "0.1"
+
+# Utils
+uuid = { version = "1", features = ["serde", "v4"] }
+chrono = { version = "0.4", features = ["serde"] }
