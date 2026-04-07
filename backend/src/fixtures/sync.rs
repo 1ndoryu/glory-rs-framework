@@ -168,9 +168,10 @@ fn compute_hash(record: &BTreeMap<String, toml::Value>) -> String {
 }
 
 /* Fase 4: Resuelve FK references en un record.
- * Sintaxis: "@tabla:record_id" → se reemplaza por el db_id real del registro referenciado.
- * Ejemplo: client_id = "@users:cliente@test.com" → UUID del user con email=cliente@test.com.
- * Requiere que la tabla referenciada ya esté sincronizada (depends_on). */
+ * Sintaxis @tabla:record_id → db_id desde _glory_fixtures (tabla ya sincronizada).
+ * Sintaxis @lookup:tabla:col=val[&col2=val2] → SELECT id FROM tabla WHERE col = val.
+ * Los valores en @lookup pueden ser @tabla:id (refs anidadas, se resuelven primero).
+ * Ejemplo: plan_id = "@lookup:service_plans:slug=basico&service_id=@services:diseno-web" */
 async fn resolve_fk_references(
     pool: &PgPool,
     record: &BTreeMap<String, toml::Value>,
@@ -180,27 +181,7 @@ async fn resolve_fk_references(
     for (key, val) in record {
         if let toml::Value::String(s) = val {
             if let Some(reference) = s.strip_prefix('@') {
-                let (ref_table, ref_id) = reference.split_once(':').ok_or_else(|| {
-                    FixtureError::Validation(format!(
-                        "Invalid FK reference '{s}' in '{key}'. Expected format: @table:record_id"
-                    ))
-                })?;
-
-                let db_id: Option<String> = sqlx::query_scalar(
-                    "SELECT db_id FROM _glory_fixtures WHERE table_name = $1 AND record_id = $2",
-                )
-                .bind(ref_table)
-                .bind(ref_id)
-                .fetch_optional(pool)
-                .await?;
-
-                let db_id = db_id.ok_or_else(|| {
-                    FixtureError::Validation(format!(
-                        "FK reference @{ref_table}:{ref_id} not found in tracking table. \
-                         Is '{ref_table}' listed in depends_on?"
-                    ))
-                })?;
-
+                let db_id = resolve_single_reference(pool, reference, key).await?;
                 resolved.insert(key.clone(), toml::Value::String(db_id));
                 continue;
             }
@@ -209,6 +190,122 @@ async fn resolve_fk_references(
     }
 
     Ok(resolved)
+}
+
+/* Resuelve una referencia individual (sin el @).
+ * "tabla:record_id" → lookup en _glory_fixtures.
+ * "lookup:tabla:col=val&col2=val2" → SELECT directo en la tabla real.
+ * Usa Box::pin por recursión async (lookup puede contener refs anidadas). */
+fn resolve_single_reference<'a>(
+    pool: &'a PgPool,
+    reference: &'a str,
+    field_name: &'a str,
+) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<String, FixtureError>> + Send + 'a>> {
+    Box::pin(async move {
+        if let Some(lookup_body) = reference.strip_prefix("lookup:") {
+            return resolve_lookup(pool, lookup_body, field_name).await;
+        }
+
+        /* Referencia estándar: tabla:record_id → _glory_fixtures */
+        let (ref_table, ref_id) = reference.split_once(':').ok_or_else(|| {
+            FixtureError::Validation(format!(
+                "Invalid FK reference '@{reference}' in '{field_name}'. Expected @table:record_id"
+            ))
+        })?;
+
+        let db_id: Option<String> = sqlx::query_scalar(
+            "SELECT db_id FROM _glory_fixtures WHERE table_name = $1 AND record_id = $2",
+        )
+        .bind(ref_table)
+        .bind(ref_id)
+        .fetch_optional(pool)
+        .await?;
+
+        db_id.ok_or_else(|| {
+            FixtureError::Validation(format!(
+                "FK reference @{ref_table}:{ref_id} not found in tracking table. \
+                 Is '{ref_table}' listed in depends_on?"
+            ))
+        })
+    })
+}
+
+/* Resuelve @lookup:tabla:col=val[&col2=val2].
+ * Cada valor puede ser otra referencia @tabla:id (se resuelve recursivamente).
+ * Construye SELECT "id" FROM tabla WHERE col1 = $1 AND col2 = $2 LIMIT 1.
+ * Todos los identificadores se validan con sanitize_identifier. */
+async fn resolve_lookup(
+    pool: &PgPool,
+    body: &str,
+    field_name: &str,
+) -> Result<String, FixtureError> {
+    /* Separar tabla de las condiciones: "service_plans:slug=basico&service_id=UUID" */
+    let (table_name, conditions_str) = body.split_once(':').ok_or_else(|| {
+        FixtureError::Validation(format!(
+            "Invalid @lookup in '{field_name}': expected @lookup:table:col=val"
+        ))
+    })?;
+
+    let safe_table = sanitize_identifier(table_name)?;
+
+    /* Parsear condiciones separadas por & */
+    let mut where_parts: Vec<String> = Vec::new();
+    let mut bind_values: Vec<String> = Vec::new();
+
+    for (i, pair) in conditions_str.split('&').enumerate() {
+        let (col, raw_val) = pair.split_once('=').ok_or_else(|| {
+            FixtureError::Validation(format!(
+                "Invalid @lookup condition '{pair}' in '{field_name}'. Expected col=value"
+            ))
+        })?;
+
+        let safe_col = sanitize_identifier(col)?;
+
+        /* Si el valor es otra referencia @tabla:id, resolverla primero */
+        let resolved_val = if let Some(nested_ref) = raw_val.strip_prefix('@') {
+            resolve_single_reference(pool, nested_ref, field_name).await?
+        } else {
+            raw_val.to_string()
+        };
+
+        /* Si el valor resuelto parece UUID, castear el parámetro para que PG compare correctamente */
+        let is_uuid = uuid::Uuid::parse_str(&resolved_val).is_ok();
+        let param = format!("${}", i + 1);
+        let casted_param = if is_uuid {
+            format!("{param}::uuid")
+        } else {
+            param
+        };
+        where_parts.push(format!("{safe_col} = {casted_param}"));
+        bind_values.push(resolved_val);
+    }
+
+    if where_parts.is_empty() {
+        return Err(FixtureError::Validation(format!(
+            "@lookup in '{field_name}' has no conditions"
+        )));
+    }
+
+    let sql = format!(
+        "SELECT \"id\"::text FROM {safe_table} WHERE {} LIMIT 1",
+        where_parts.join(" AND ")
+    );
+
+    /* Ejecutar con all bind values como strings (PG hará cast implícito para UUID) */
+    let mut query = sqlx::query_scalar::<_, String>(&sql);
+    for val in &bind_values {
+        query = query.bind(val);
+    }
+
+    let result = query.fetch_optional(pool).await?;
+
+    result.ok_or_else(|| {
+        let pairs: Vec<String> = conditions_str.split('&').map(String::from).collect();
+        FixtureError::Validation(format!(
+            "@lookup:{table_name} not found for conditions [{}] in '{field_name}'",
+            pairs.join(", ")
+        ))
+    })
 }
 
 fn process_record(

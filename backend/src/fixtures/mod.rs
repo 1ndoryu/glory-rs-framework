@@ -135,6 +135,10 @@ impl ContentManager {
             Err(e) => report.errors.push(format!("orphan cleanup: {e}")),
         }
 
+        for err in &report.errors {
+            tracing::error!("[fixtures] {err}");
+        }
+
         tracing::info!("[fixtures] Sync complete: {}", report.summary());
         Ok(report)
     }
