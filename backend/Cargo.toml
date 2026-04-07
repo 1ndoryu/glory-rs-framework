@@ -1,5 +1,5 @@
 [package]
-name = "glory-backend"
+name = "glory-rs"
 version = "0.1.0"
 edition = "2021"
 description = "Glory Framework — Backend foundation for web apps (Axum + SQLx + JWT)"
@@ -26,6 +26,10 @@ thiserror = "2"
 
 # Logging
 tracing = "0.1"
+
+# Fixtures
+toml = "0.8"
+sha2 = "0.10"
 
 # Utils
 uuid = { version = "1", features = ["serde", "v4"] }
