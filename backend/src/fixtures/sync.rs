@@ -1,3 +1,7 @@
+/* sentinel-disable-file sqlx-query-sin-macro sqlx-query-as-sin-macro
+ * Justificación: sync.rs genera queries dinámicas a partir de definiciones TOML.
+ * Las tablas/columnas se validan con whitelist alfanumérica, pero los queries
+ * no son estáticos — no pueden usar macros sqlx. */
 /* Lógica de sincronización: diff hash → UPSERT → tracking.
  * Usa PgArguments para binding dinámico de tipos según el valor TOML.
  * Seguridad SQL: todos los identificadores (tabla, columna) se validan

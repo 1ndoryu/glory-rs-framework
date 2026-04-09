@@ -1,3 +1,5 @@
+/* sentinel-disable-file sqlx-query-sin-macro sqlx-query-as-sin-macro: fixtures usan runtime
+ * queries porque construyen SQL dinámico basado en esquemas TOML genéricos. */
 /* Glory Fixtures — Sistema declarativo de content fixtures para PostgreSQL.
  * Lee archivos TOML desde un directorio content/, sincroniza con la BD
  * (insert/update/delete), y rastrea qué registros son gestionados via
