@@ -34,6 +34,10 @@ pub enum AppError {
 
     #[error("Error de validación: {0}")]
     Validation(String),
+
+    /* [104A-36] Rate limiting — HTTP 429 Too Many Requests */
+    #[error("Demasiadas solicitudes: {0}")]
+    TooManyRequests(String),
 }
 
 /// Estructura de respuesta de error expuesta en la API
@@ -76,6 +80,11 @@ impl IntoResponse for AppError {
             Self::Validation(msg) => (
                 StatusCode::UNPROCESSABLE_ENTITY,
                 "validation_error",
+                msg.clone(),
+            ),
+            Self::TooManyRequests(msg) => (
+                StatusCode::TOO_MANY_REQUESTS,
+                "too_many_requests",
                 msg.clone(),
             ),
         };
