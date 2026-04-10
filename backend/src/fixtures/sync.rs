@@ -153,7 +153,7 @@ enum Processed {
     Float64(f64),
     Bool(bool),
     Json(serde_json::Value),
-    /// UUID resuelto desde FK reference — se bindea como uuid::Uuid
+    /// UUID resuelto desde FK reference — se bindea como `uuid::Uuid`
     Uuid(uuid::Uuid),
 }
 

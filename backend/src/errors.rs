@@ -20,6 +20,9 @@ pub enum AppError {
     #[error("No autorizado")]
     Unauthorized,
 
+    #[error("Prohibido: {0}")]
+    Forbidden(String),
+
     #[error("Conflicto: {0}")]
     Conflict(String),
 
@@ -52,6 +55,7 @@ impl IntoResponse for AppError {
                 "unauthorized",
                 "Credenciales inválidas o ausentes".to_string(),
             ),
+            Self::Forbidden(msg) => (StatusCode::FORBIDDEN, "forbidden", msg.clone()),
             Self::Conflict(msg) => (StatusCode::CONFLICT, "conflict", msg.clone()),
             Self::Internal(msg) => {
                 tracing::error!("Error interno: {msg}");
