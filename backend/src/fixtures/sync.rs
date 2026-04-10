@@ -18,6 +18,29 @@ use super::{FixtureError, SyncReport};
 /// Tipo para el callback de password hashing
 type HasherFn = dyn Fn(&str) -> Result<String, Box<dyn std::error::Error + Send + Sync>> + Send + Sync;
 
+/* [104A-10] Un hash idéntico en _glory_fixtures no garantiza que el registro siga
+ * existiendo en la tabla real. Si alguien borró un fixture-managed row manualmente,
+ * el próximo sync debe reinsertarlo en vez de saltarlo para no dejar seeds rotos. */
+async fn tracked_record_exists(
+    pool: &PgPool,
+    safe_table: &str,
+    safe_pk_col: &str,
+    tracked_db_id: Option<&str>,
+) -> Result<bool, FixtureError> {
+    let Some(tracked_db_id) = tracked_db_id else {
+        return Ok(false);
+    };
+
+    let sql = format!(
+        "SELECT EXISTS(SELECT 1 FROM {safe_table} WHERE {safe_pk_col}::text = $1)"
+    );
+
+    Ok(sqlx::query_scalar(&sql)
+        .bind(tracked_db_id)
+        .fetch_one(pool)
+        .await?)
+}
+
 /// Sincroniza un fixture completo contra la BD
 pub async fn sync_fixture(
     pool: &PgPool,
@@ -50,17 +73,27 @@ pub async fn sync_fixture(
         let hash = compute_hash(record);
 
         /* Verificar si ya está tracked con el mismo hash */
-        let existing_hash: Option<String> = sqlx::query_scalar(
-            "SELECT content_hash FROM _glory_fixtures WHERE table_name = $1 AND record_id = $2",
+        let existing_tracking: Option<(String, Option<String>)> = sqlx::query_as(
+            "SELECT content_hash, db_id FROM _glory_fixtures WHERE table_name = $1 AND record_id = $2",
         )
         .bind(&fixture.meta.table)
         .bind(&record_id)
         .fetch_optional(pool)
         .await?;
 
-        if existing_hash.as_deref() == Some(hash.as_str()) {
-            report.skipped += 1;
-            continue;
+        if let Some((existing_hash, tracked_db_id)) = existing_tracking.as_ref() {
+            let row_still_exists = tracked_record_exists(
+                pool,
+                &table,
+                &pk_col,
+                tracked_db_id.as_deref(),
+            )
+            .await?;
+
+            if existing_hash == &hash && row_still_exists {
+                report.skipped += 1;
+                continue;
+            }
         }
 
         /* Fase 4: resolver FK references (@tabla:id → db_id real) */
@@ -107,7 +140,7 @@ pub async fn sync_fixture(
         .execute(pool)
         .await?;
 
-        if existing_hash.is_some() {
+        if existing_tracking.is_some() {
             report.updated += 1;
             tracing::debug!("[fixtures] Updated {}.{record_id}", fixture.meta.table);
         } else {
