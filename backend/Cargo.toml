@@ -8,7 +8,7 @@ authors = ["1ndoryu"]
 
 [dependencies]
 # Web framework
-axum = { version = "0.7", features = ["macros"] }
+axum = { version = "0.7", features = ["macros", "ws"] }
 tokio = { version = "1", features = ["full"] }
 
 # Serialization
@@ -30,6 +30,10 @@ tracing = "0.1"
 # Fixtures
 toml = "0.8"
 sha2 = "0.10"
+hmac = "0.12"
+base64 = "0.22"
+hex = "0.4"
+dashmap = "6"
 
 # Utils
 uuid = { version = "1", features = ["serde", "v4"] }
