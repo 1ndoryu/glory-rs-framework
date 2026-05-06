@@ -70,8 +70,7 @@ impl AppConfig {
             password,
             from_email: std::env::var("SMTP_FROM_EMAIL")
                 .unwrap_or_else(|_| "noreply@app.com".to_string()),
-            from_name: std::env::var("SMTP_FROM_NAME")
-                .unwrap_or_else(|_| "App".to_string()),
+            from_name: std::env::var("SMTP_FROM_NAME").unwrap_or_else(|_| "App".to_string()),
         })
     }
 }

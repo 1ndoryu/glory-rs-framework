@@ -54,7 +54,11 @@ impl SyncReport {
     pub fn summary(&self) -> String {
         format!(
             "inserted={} updated={} deleted={} skipped={} errors={}",
-            self.inserted, self.updated, self.deleted, self.skipped, self.errors.len()
+            self.inserted,
+            self.updated,
+            self.deleted,
+            self.skipped,
+            self.errors.len()
         )
     }
 }
@@ -109,7 +113,10 @@ impl ContentManager {
 
         let paths = self.discover_fixtures()?;
         if paths.is_empty() {
-            tracing::info!("[fixtures] No fixture files found in {}", self.content_dir.display());
+            tracing::info!(
+                "[fixtures] No fixture files found in {}",
+                self.content_dir.display()
+            );
             return Ok(SyncReport::default());
         }
 
@@ -182,11 +189,10 @@ impl ContentManager {
     }
 
     async fn clean_orphans_internal(&self, fixtures: &[&FixtureFile]) -> Result<u64, FixtureError> {
-        let tracked: Vec<TrackedRecord> = sqlx::query_as(
-            "SELECT table_name, id_field, record_id FROM _glory_fixtures",
-        )
-        .fetch_all(&self.pool)
-        .await?;
+        let tracked: Vec<TrackedRecord> =
+            sqlx::query_as("SELECT table_name, id_field, record_id FROM _glory_fixtures")
+                .fetch_all(&self.pool)
+                .await?;
 
         if tracked.is_empty() {
             return Ok(0);
@@ -197,10 +203,7 @@ impl ContentManager {
         for f in fixtures {
             for record in &f.records {
                 if let Some(id_val) = record.get(&f.meta.id_field) {
-                    current.insert((
-                        f.meta.table.clone(),
-                        sync::toml_value_to_id_string(id_val),
-                    ));
+                    current.insert((f.meta.table.clone(), sync::toml_value_to_id_string(id_val)));
                 }
             }
         }
@@ -222,22 +225,24 @@ impl ContentManager {
             {
                 tracing::warn!(
                     "[fixtures] Failed to delete orphan {}.{}={}: {e}",
-                    tr.table_name, tr.id_field, tr.record_id
+                    tr.table_name,
+                    tr.id_field,
+                    tr.record_id
                 );
                 continue;
             }
 
-            sqlx::query(
-                "DELETE FROM _glory_fixtures WHERE table_name = $1 AND record_id = $2",
-            )
-            .bind(&tr.table_name)
-            .bind(&tr.record_id)
-            .execute(&self.pool)
-            .await?;
+            sqlx::query("DELETE FROM _glory_fixtures WHERE table_name = $1 AND record_id = $2")
+                .bind(&tr.table_name)
+                .bind(&tr.record_id)
+                .execute(&self.pool)
+                .await?;
 
             tracing::info!(
                 "[fixtures] Deleted orphan: {}.{}={}",
-                tr.table_name, tr.id_field, tr.record_id
+                tr.table_name,
+                tr.id_field,
+                tr.record_id
             );
             deleted += 1;
         }
@@ -257,7 +262,10 @@ struct TrackedRecord {
 fn topological_sort(fixtures: &[FixtureFile]) -> Vec<&FixtureFile> {
     let mut sorted: Vec<&FixtureFile> = Vec::new();
     let mut remaining: Vec<&FixtureFile> = fixtures.iter().collect();
-    let max_iter = remaining.len().saturating_mul(remaining.len()).saturating_add(1);
+    let max_iter = remaining
+        .len()
+        .saturating_mul(remaining.len())
+        .saturating_add(1);
     let mut iterations = 0;
 
     while !remaining.is_empty() && iterations < max_iter {

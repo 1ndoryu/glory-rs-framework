@@ -40,20 +40,24 @@ pub fn parse_file(path: &Path) -> Result<FixtureFile, FixtureError> {
     let content = std::fs::read_to_string(path)?;
     let doc: toml::Value = toml::from_str(&content)?;
 
-    let meta_val = doc
-        .get("meta")
-        .ok_or_else(|| FixtureError::Validation(format!("{}: missing [meta] section", path.display())))?;
+    let meta_val = doc.get("meta").ok_or_else(|| {
+        FixtureError::Validation(format!("{}: missing [meta] section", path.display()))
+    })?;
 
     let table = meta_val
         .get("table")
         .and_then(toml::Value::as_str)
-        .ok_or_else(|| FixtureError::Validation(format!("{}: meta.table is required", path.display())))?
+        .ok_or_else(|| {
+            FixtureError::Validation(format!("{}: meta.table is required", path.display()))
+        })?
         .to_string();
 
     let id_field = meta_val
         .get("id_field")
         .and_then(toml::Value::as_str)
-        .ok_or_else(|| FixtureError::Validation(format!("{}: meta.id_field is required", path.display())))?
+        .ok_or_else(|| {
+            FixtureError::Validation(format!("{}: meta.id_field is required", path.display()))
+        })?
         .to_string();
 
     let depends_on = meta_val
@@ -85,10 +89,7 @@ pub fn parse_file(path: &Path) -> Result<FixtureFile, FixtureError> {
     let mut records = Vec::with_capacity(records_val.len());
     for (idx, record_val) in records_val.iter().enumerate() {
         let table_map = record_val.as_table().ok_or_else(|| {
-            FixtureError::Validation(format!(
-                "{}: record[{idx}] is not a table",
-                path.display()
-            ))
+            FixtureError::Validation(format!("{}: record[{idx}] is not a table", path.display()))
         })?;
 
         if !table_map.contains_key(&id_field) {

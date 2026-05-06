@@ -16,7 +16,8 @@ use super::parser::FixtureFile;
 use super::{FixtureError, SyncReport};
 
 /// Tipo para el callback de password hashing
-type HasherFn = dyn Fn(&str) -> Result<String, Box<dyn std::error::Error + Send + Sync>> + Send + Sync;
+type HasherFn =
+    dyn Fn(&str) -> Result<String, Box<dyn std::error::Error + Send + Sync>> + Send + Sync;
 
 /* [104A-10] Un hash idéntico en _glory_fixtures no garantiza que el registro siga
  * existiendo en la tabla real. Si alguien borró un fixture-managed row manualmente,
@@ -31,9 +32,7 @@ async fn tracked_record_exists(
         return Ok(false);
     };
 
-    let sql = format!(
-        "SELECT EXISTS(SELECT 1 FROM {safe_table} WHERE {safe_pk_col}::text = $1)"
-    );
+    let sql = format!("SELECT EXISTS(SELECT 1 FROM {safe_table} WHERE {safe_pk_col}::text = $1)");
 
     Ok(sqlx::query_scalar(&sql)
         .bind(tracked_db_id)
@@ -59,14 +58,12 @@ pub async fn sync_fixture(
     let mut report = SyncReport::default();
 
     for record in &fixture.records {
-        let id_raw = record
-            .get(&fixture.meta.id_field)
-            .ok_or_else(|| {
-                FixtureError::Validation(format!(
-                    "Record missing id_field '{}'",
-                    fixture.meta.id_field
-                ))
-            })?;
+        let id_raw = record.get(&fixture.meta.id_field).ok_or_else(|| {
+            FixtureError::Validation(format!(
+                "Record missing id_field '{}'",
+                fixture.meta.id_field
+            ))
+        })?;
         let record_id = toml_value_to_id_string(id_raw);
 
         /* Computar hash del contenido para detectar cambios */
@@ -82,13 +79,8 @@ pub async fn sync_fixture(
         .await?;
 
         if let Some((existing_hash, tracked_db_id)) = existing_tracking.as_ref() {
-            let row_still_exists = tracked_record_exists(
-                pool,
-                &table,
-                &pk_col,
-                tracked_db_id.as_deref(),
-            )
-            .await?;
+            let row_still_exists =
+                tracked_record_exists(pool, &table, &pk_col, tracked_db_id.as_deref()).await?;
 
             if existing_hash == &hash && row_still_exists {
                 report.skipped += 1;
@@ -118,10 +110,7 @@ pub async fn sync_fixture(
             .fetch_one(pool)
             .await
             .map_err(|e| {
-                FixtureError::Validation(format!(
-                    "{}.{record_id}: {e}",
-                    fixture.meta.table
-                ))
+                FixtureError::Validation(format!("{}.{record_id}: {e}", fixture.meta.table))
             })?;
 
         /* Actualizar tracking con db_id para FK resolution futura */
@@ -154,11 +143,7 @@ pub async fn sync_fixture(
 
 /// Valida que un identificador SQL solo contenga [a-zA-Z0-9_] y lo envuelve en comillas
 pub fn sanitize_identifier(name: &str) -> Result<String, FixtureError> {
-    if name.is_empty()
-        || !name
-            .chars()
-            .all(|c| c.is_ascii_alphanumeric() || c == '_')
-    {
+    if name.is_empty() || !name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_') {
         return Err(FixtureError::Validation(format!(
             "Invalid SQL identifier: '{name}'"
         )));
@@ -237,7 +222,8 @@ fn resolve_single_reference<'a>(
     pool: &'a PgPool,
     reference: &'a str,
     field_name: &'a str,
-) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<String, FixtureError>> + Send + 'a>> {
+) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<String, FixtureError>> + Send + 'a>>
+{
     Box::pin(async move {
         if let Some(lookup_body) = reference.strip_prefix("lookup:") {
             return resolve_lookup(pool, lookup_body, field_name).await;
@@ -375,9 +361,7 @@ fn process_record(
             toml::Value::Integer(n) => Processed::Int64(*n),
             toml::Value::Float(f) => Processed::Float64(*f),
             toml::Value::Boolean(b) => Processed::Bool(*b),
-            toml::Value::Array(_) | toml::Value::Table(_) => {
-                Processed::Json(toml_to_json(val))
-            }
+            toml::Value::Array(_) | toml::Value::Table(_) => Processed::Json(toml_to_json(val)),
             toml::Value::Datetime(d) => Processed::Text(d.to_string()),
         };
         out.insert(key.clone(), processed);
@@ -393,12 +377,12 @@ fn toml_to_json(val: &toml::Value) -> serde_json::Value {
         toml::Value::Float(f) => serde_json::json!(f),
         toml::Value::Boolean(b) => serde_json::json!(b),
         toml::Value::Datetime(d) => serde_json::Value::String(d.to_string()),
-        toml::Value::Array(arr) => {
-            serde_json::Value::Array(arr.iter().map(toml_to_json).collect())
-        }
+        toml::Value::Array(arr) => serde_json::Value::Array(arr.iter().map(toml_to_json).collect()),
         toml::Value::Table(t) => {
-            let map: serde_json::Map<String, serde_json::Value> =
-                t.iter().map(|(k, v)| (k.clone(), toml_to_json(v))).collect();
+            let map: serde_json::Map<String, serde_json::Value> = t
+                .iter()
+                .map(|(k, v)| (k.clone(), toml_to_json(v)))
+                .collect();
             serde_json::Value::Object(map)
         }
     }
@@ -431,10 +415,7 @@ fn build_upsert_sql(
             let param = format!("${}", i + 1);
             if let Some(cast) = casts.get(*col) {
                 /* Validar el cast type para prevenir inyección */
-                if cast
-                    .chars()
-                    .all(|c| c.is_ascii_alphanumeric() || c == '_')
-                {
+                if cast.chars().all(|c| c.is_ascii_alphanumeric() || c == '_') {
                     format!("{param}::{cast}")
                 } else {
                     param
