@@ -36,6 +36,9 @@ if (!existsSync(frontendDir)) {
 
 const isWin = isWindowsPlatform();
 const children = [];
+const devArgs = process.argv.slice(2);
+const syncFrontendOnly = devArgs.includes('--sync-frontend');
+const skipMigrations = process.env.GLORY_DEV_SKIP_MIGRATIONS === '1' || devArgs.includes('--skip-migrations');
 
 function isWindowsPlatform() {
     return process.platform === 'win32';
@@ -475,12 +478,12 @@ if (!binName) {
     process.exit(1);
 }
 
-if (process.argv.includes('--print-db')) {
+if (devArgs.includes('--print-db')) {
     console.log(databaseUrl);
     process.exit(0);
 }
 
-if (process.argv.includes('--sync-frontend')) {
+if (syncFrontendOnly) {
     ensureFrontendDependencies();
     process.exit(0);
 }
@@ -488,7 +491,11 @@ if (process.argv.includes('--sync-frontend')) {
 ensureFrontendDependencies();
 
 ensureDatabaseExists(databaseUrl, dbName);
-ensureMigrationsAreCompatible(databaseUrl, dbName);
+if (skipMigrations) {
+    console.warn('[glory-dev] --skip-migrations activo; no se aplican migraciones locales.');
+} else {
+    ensureMigrationsAreCompatible(databaseUrl, dbName);
+}
 
 const childEnv = {
     ...process.env,
