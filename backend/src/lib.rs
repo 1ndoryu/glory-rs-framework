@@ -11,3 +11,4 @@
 pub mod config;
 pub mod errors;
 pub mod fixtures;
+pub mod websocket;
