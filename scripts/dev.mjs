@@ -335,7 +335,13 @@ function resolveRustcWrapper() {
     return command.status === 0 ? 'sccache' : null;
 }
 
-function spawnCargoTargetWatcher(env, activeTargetDir) {
+/* [256A-1c] Watcher de limpieza de target Cargo.
+ * Se elimino -ExcludeDirs porque clean-cargo-target.ps1 ya protege
+ * durante builds activos via Test-RustBuildActive. Sin exclusion,
+ * el directorio activo tambien se limpia cuando excede el limite.
+ * Ver clean-cargo-target.ps1 para la logica de limpieza progresiva:
+ * incremental/ -> .fingerprint+build/ -> deps/. */
+function spawnCargoTargetWatcher(env, _activeTargetDir) {
     if (!isWin) {
         return;
     }
@@ -355,8 +361,6 @@ function spawnCargoTargetWatcher(env, activeTargetDir) {
             watcherScript,
             '-TargetDirs',
             cargoTargetBase,
-            '-ExcludeDirs',
-            activeTargetDir,
             '-MaxTotalMB',
             cargoTargetMaxMb,
             '-IntervalSeconds',
@@ -518,6 +522,29 @@ console.log(`[glory-dev] Cargo target: ${cargoTargetDir}`);
 if (rustcWrapper) {
     console.log(`[glory-dev] Rust cache: ${rustcWrapper}`);
 }
+/* [256A-1c] Pre-limpieza: si el target base excede el limite, limpia
+ * antes de arrancar. Usa -Force para saltar Test-RustBuildActive
+ * (no hay build en este punto). */
+if (isWin && existsSync(cargoTargetBase)) {
+    const cleanScript = resolve(frameworkScriptDir, 'clean-cargo-target.ps1');
+    if (existsSync(cleanScript)) {
+        const cleanResult = spawnSync(
+            commandName('powershell'),
+            [
+                '-ExecutionPolicy', 'Bypass',
+                '-File', cleanScript,
+                '-TargetDirs', cargoTargetBase,
+                '-MaxTotalMB', cargoTargetMaxMb,
+                '-Force',
+            ],
+            { cwd: projectRoot, env: process.env, stdio: 'inherit', timeout: 60000 },
+        );
+        if (cleanResult.status !== 0 && cleanResult.status !== null) {
+            console.warn(`[glory-dev] Pre-limpieza de target fallo con codigo ${cleanResult.status}`);
+        }
+    }
+}
+
 console.log(`[glory-dev] Iniciando backend (cargo run --bin ${binName}) y frontend (vite)...\n`);
 
 spawnProc('backend', 'cargo', ['run', '--bin', binName], { cwd: projectRoot, env: childEnv });
