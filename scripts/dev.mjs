@@ -21,7 +21,7 @@ const frontendNodeModules = resolve(frontendDir, 'node_modules');
 const frontendInstallMarker = resolve(frontendNodeModules, '.glory-dev-install.json');
 const envPath = resolve(projectRoot, '.env');
 const cargoTargetBase = process.env.CARGO_TARGET_DIR_BASE || (isWindowsPlatform() ? 'C:\\tmp\\glory-target' : resolve(tmpdir(), 'glory-target'));
-const cargoTargetMaxMb = process.env.GLORY_CARGO_TARGET_MAX_MB || '4096';
+const cargoTargetMaxMb = process.env.GLORY_CARGO_TARGET_MAX_MB || '15360';
 const cargoCleanIntervalSeconds = process.env.GLORY_CARGO_CLEAN_INTERVAL_SECONDS || '120';
 
 if (!existsSync(cargoToml)) {
