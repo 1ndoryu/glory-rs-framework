@@ -123,7 +123,9 @@ impl WebSocketHub {
 
     #[must_use]
     pub fn connection_count(&self, user_id: i32) -> usize {
-        self.connections.get(&user_id).map_or(0, |bucket| bucket.len())
+        self.connections
+            .get(&user_id)
+            .map_or(0, |bucket| bucket.len())
     }
 
     #[must_use]
