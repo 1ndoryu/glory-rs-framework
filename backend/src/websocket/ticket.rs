@@ -25,8 +25,9 @@ pub struct WebSocketTicketClaims {
 fn now_unix() -> i64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
-        .map(|duration| i64::try_from(duration.as_secs()).unwrap_or(i64::MAX))
-        .unwrap_or(0)
+        .map_or(0, |duration| {
+            i64::try_from(duration.as_secs()).unwrap_or(i64::MAX)
+        })
 }
 
 fn normalize_ttl(ttl_secs: i64) -> i64 {
@@ -63,9 +64,15 @@ pub fn verify(token: &str, secret: &str) -> Result<WebSocketTicketClaims, AppErr
         return Err(AppError::Unauthorized);
     }
 
-    let user_id = parts[0].parse::<i32>().map_err(|_| AppError::Unauthorized)?;
-    let exp = parts[1].parse::<i64>().map_err(|_| AppError::Unauthorized)?;
-    let nonce = parts[2].parse::<Uuid>().map_err(|_| AppError::Unauthorized)?;
+    let user_id = parts[0]
+        .parse::<i32>()
+        .map_err(|_| AppError::Unauthorized)?;
+    let exp = parts[1]
+        .parse::<i64>()
+        .map_err(|_| AppError::Unauthorized)?;
+    let nonce = parts[2]
+        .parse::<Uuid>()
+        .map_err(|_| AppError::Unauthorized)?;
     if now_unix() > exp {
         return Err(AppError::Forbidden("ticket websocket expirado".into()));
     }
