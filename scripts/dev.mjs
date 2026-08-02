@@ -399,7 +399,14 @@ function ensureMigrationsAreCompatible(databaseUrl, dbName) {
     }
 
     const output = `${firstRun.stdout}\n${firstRun.stderr}`;
-    if (!/VersionMissing|VersionMismatch|previously applied but has been modified/.test(output)) {
+    /* [028A-1] Ademas del historial faltante/modificado, la BD local de desarrollo
+     * puede quedar con objetos creados fuera de sqlx (prototipos manuales, agentes
+     * en paralelo, restauraciones parciales): `sqlx migrate run` falla con
+     * "relation ... already exists" / "la relacion ... ya existe" (SQLSTATE 42P07)
+     * porque la tabla existe sin fila en _sqlx_migrations. Ese drift tambien es
+     * una incompatibilidad de migracion y se cura con el mismo reset del schema
+     * public local. */
+    if (!/VersionMissing|VersionMismatch|previously applied but has been modified|already exists|ya existe/.test(output)) {
         process.stdout.write(firstRun.stdout);
         process.stderr.write(firstRun.stderr);
         console.error('[glory-dev] No se pudieron aplicar las migraciones locales.');
@@ -413,7 +420,7 @@ function ensureMigrationsAreCompatible(databaseUrl, dbName) {
         process.exit(firstRun.status ?? 1);
     }
 
-    console.warn(`[glory-dev] Historial de migraciones incompatible en ${dbName}; reseteando schema public de desarrollo.`);
+    console.warn(`[glory-dev] Migraciones incompatibles o drift en ${dbName}; reseteando schema public de desarrollo.`);
     const resetResult = resetPublicSchema(psql, databaseUrl);
     if (resetResult.status !== 0) {
         process.stderr.write(resetResult.stderr);
