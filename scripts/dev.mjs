@@ -6,9 +6,9 @@
 
 import { spawn, spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { existsSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, readdirSync, unlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { dirname, resolve } from 'node:path';
+import { dirname, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const frameworkScriptDir = dirname(fileURLToPath(import.meta.url));
@@ -35,6 +35,26 @@ if (!existsSync(frontendDir)) {
 }
 
 const isWin = isWindowsPlatform();
+
+function isPathInside(root, candidate) {
+    const relativePath = relative(resolve(root), resolve(candidate));
+    return relativePath === ''
+        || (relativePath !== '..'
+            && !relativePath.startsWith(`..${sep}`)
+            && !relativePath.includes(`${sep}..${sep}`));
+}
+
+/* La limpieza solo puede recibir los dos roots Cargo conocidos y sus
+ * descendientes. Un CARGO_TARGET_DIR_BASE personalizado fuera de ellos sigue
+ * siendo válido para Cargo, pero queda deliberadamente fuera del limpiador. */
+const knownCargoCleanupRoots = isWin
+    ? ['C:\\tmp\\glory-target', 'C:\\tmp\\glory-openapi-target']
+    : [];
+const cargoCleanupTargets = isWin
+    ? [cargoTargetBase, ...knownCargoCleanupRoots].filter((targetDir, index, targets) =>
+        targets.indexOf(targetDir) === index
+        && knownCargoCleanupRoots.some((root) => isPathInside(root, targetDir)))
+    : [cargoTargetBase];
 const children = [];
 const devArgs = process.argv.slice(2);
 const syncFrontendOnly = devArgs.includes('--sync-frontend');
@@ -336,12 +356,11 @@ function resolveRustcWrapper() {
 }
 
 /* [256A-1c] Watcher de limpieza de target Cargo.
- * Se elimino -ExcludeDirs porque clean-cargo-target.ps1 ya protege
- * durante builds activos via Test-RustBuildActive. Sin exclusion,
- * el directorio activo tambien se limpia cuando excede el limite.
- * Ver clean-cargo-target.ps1 para la logica de limpieza progresiva:
+ * El target activo se excluye explícitamente para permitir podar targets
+ * antiguos mientras `cargo run` permanece vivo. La limpieza sigue limitada
+ * a C:\\tmp\\glory-target y usa la poda progresiva:
  * incremental/ -> .fingerprint+build/ -> deps/. */
-function spawnCargoTargetWatcher(env, _activeTargetDir) {
+function spawnCargoTargetWatcher(env, activeTargetDir) {
     if (!isWin) {
         return;
     }
@@ -360,11 +379,14 @@ function spawnCargoTargetWatcher(env, _activeTargetDir) {
             '-File',
             watcherScript,
             '-TargetDirs',
-            cargoTargetBase,
+            ...cargoCleanupTargets,
+            '-ExcludeDirs',
+            activeTargetDir,
             '-MaxTotalMB',
             cargoTargetMaxMb,
             '-IntervalSeconds',
             cargoCleanIntervalSeconds,
+            '-AllowCleanupWhileBuildActive',
         ],
         { cwd: projectRoot, env, stdio: 'ignore' },
     );
@@ -455,10 +477,18 @@ function cleanup() {
             child.kill();
         }
     }
+    if (existsSync(cargoActivityMarker)) {
+        try {
+            unlinkSync(cargoActivityMarker);
+        } catch {
+            console.warn(`[glory-dev] No se pudo retirar el marcador ${cargoActivityMarker}`);
+        }
+    }
 }
 
 process.on('SIGINT', cleanup);
 process.on('SIGTERM', cleanup);
+process.once('exit', cleanup);
 
 function detectBinName() {
     const toml = readFileSync(cargoToml, 'utf8');
@@ -469,6 +499,7 @@ function detectBinName() {
 const envValues = parseEnvFile(envPath);
 const branch = detectBranch();
 const cargoTargetDir = process.env.GLORY_CARGO_TARGET_DIR || resolve(cargoTargetBase, `${detectPackageName()}_${slugifyBranchName(branch)}`);
+const cargoActivityMarker = join(cargoTargetDir, `.glory-cargo-active-${process.pid}.json`);
 const dbName = databaseNameForBranch(branch);
 if (!/^[a-zA-Z0-9_]+$/.test(dbName)) {
     console.error(`[glory-dev] Nombre de BD inseguro: ${dbName}`);
@@ -493,6 +524,8 @@ if (syncFrontendOnly) {
 }
 
 ensureFrontendDependencies();
+
+createCargoActivityMarker();
 
 ensureDatabaseExists(databaseUrl, dbName);
 if (skipMigrations) {
@@ -522,10 +555,25 @@ console.log(`[glory-dev] Cargo target: ${cargoTargetDir}`);
 if (rustcWrapper) {
     console.log(`[glory-dev] Rust cache: ${rustcWrapper}`);
 }
-/* [256A-1c] Pre-limpieza: si el target base excede el limite, limpia
- * antes de arrancar. Usa -Force para saltar Test-RustBuildActive
- * (no hay build en este punto). */
-if (isWin && existsSync(cargoTargetBase)) {
+function createCargoActivityMarker() {
+    try {
+        mkdirSync(cargoTargetDir, { recursive: true });
+        writeFileSync(cargoActivityMarker, JSON.stringify({
+            pid: process.pid,
+            projectRoot,
+            createdAt: new Date().toISOString(),
+        }, null, 2));
+    } catch (error) {
+        console.error(`[glory-dev] No se pudo crear el marcador de actividad: ${error.message}`);
+        process.exit(1);
+    }
+}
+
+/* [256A-1c] Pre-limpieza: si el total de los targets conocidos excede el
+ * límite, limpia antes de arrancar. `-Force` solo evita el bloqueo global;
+ * `-ExcludeDirs` protege el target activo y los marcadores protegen otras
+ * instancias. El script mantiene la whitelist dentro de C:\\tmp. */
+if (isWin && cargoCleanupTargets.some((targetDir) => existsSync(targetDir))) {
     const cleanScript = resolve(frameworkScriptDir, 'clean-cargo-target.ps1');
     if (existsSync(cleanScript)) {
         const cleanResult = spawnSync(
@@ -533,14 +581,15 @@ if (isWin && existsSync(cargoTargetBase)) {
             [
                 '-ExecutionPolicy', 'Bypass',
                 '-File', cleanScript,
-                '-TargetDirs', cargoTargetBase,
+                '-TargetDirs', ...cargoCleanupTargets,
+                '-ExcludeDirs', cargoTargetDir,
                 '-MaxTotalMB', cargoTargetMaxMb,
                 '-Force',
             ],
             { cwd: projectRoot, env: process.env, stdio: 'inherit', timeout: 60000 },
         );
         if (cleanResult.status !== 0 && cleanResult.status !== null) {
-            console.warn(`[glory-dev] Pre-limpieza de target fallo con codigo ${cleanResult.status}`);
+            console.warn(`[glory-dev] Pre-limpieza de targets fallo con codigo ${cleanResult.status}`);
         }
     }
 }
