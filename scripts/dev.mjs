@@ -478,9 +478,30 @@ function spawnProc(label, cmd, args, options) {
     return proc;
 }
 
+/* [038A-1] cleanup(): al cerrar dev, matar el ARBOL completo de procesos en
+ * Windows. child.kill() solo mata el proceso directo (cargo) y deja huerfano
+ * a su nieto (glory-backend.exe), que bloquea el binario en el proximo arranque
+ * (Acceso denegado os error 5) y bloquea la poda de targets ("build Rust activo"
+ * sin marcador verificable). taskkill /T /F derriba todo el arbol de procesos. */
+function killProcessTree(pid) {
+    if (!isWin || !pid) {
+        return;
+    }
+    try {
+        spawnSync('taskkill', ['/PID', String(pid), '/T', '/F'], { stdio: 'ignore', timeout: 10000 });
+    } catch {
+        /* si taskkill falla, el proceso ya no existe; no hay mas que hacer */
+    }
+}
+
 function cleanup() {
     for (const child of children) {
-        if (!child.killed) {
+        if (child.killed) {
+            continue;
+        }
+        if (isWin) {
+            killProcessTree(child.pid);
+        } else {
             child.kill();
         }
     }
@@ -576,10 +597,68 @@ function createCargoActivityMarker() {
     }
 }
 
+/* [038A-1] Al arrancar, matar binarios huerfanos de una instancia dev previa
+ * cuyo binario apunte al target actual. Si el proceso node murio sin pasar por
+ * cleanup() (crash, kill -9, cierre de VS Code), quedan cargo/glory-backend
+ * vivos: `cargo run` no puede sobrescribir el .exe (os error 5) y la poda se
+ * bloquea por "build Rust activo" sin marcador. Esto se ejecuta ANTES de la
+ * pre-limpieza para que la poda corra sin bloqueo.
+ * Seguridad: si existe un marcador de actividad valido (otra instancia dev del
+ * mismo target corriendo), no se mata nada para no romper esa instancia. */
+function killStaleProjectProcesses(cargoTargetDir, binName) {
+    if (!isWin || !binName) {
+        return;
+    }
+    const targetEsc = cargoTargetDir.replace(/'/g, "''");
+    const binPathPattern = join(cargoTargetDir, 'debug', `${binName}.exe`).replace(/'/g, "''");
+    const psScript = [
+        `$target = '${targetEsc}'`,
+        `$pattern = '${binPathPattern}'`,
+        // Si hay una instancia dev viva del mismo target, su marcador esta
+        // activo y apunta a un PID existente: no tocar nada.
+        '$markers = Get-ChildItem -LiteralPath $target -Force -File -Filter \'.glory-cargo-active-*.json\' -ErrorAction SilentlyContinue',
+        '$aliveMarker = $false',
+        'foreach ($m in $markers) {',
+        '    try {',
+        '        $meta = Get-Content -LiteralPath $m.FullName -Raw | ConvertFrom-Json',
+        '        if ($meta.pid -and (Get-Process -Id ([int]$meta.pid) -ErrorAction Stop)) { $aliveMarker = $true; break }',
+        '    } catch { /* marcador obsoleto: instancia ya muerta */ }',
+        '}',
+        'if ($aliveMarker) {',
+        '    Write-Output "[glory-dev] Instancia dev activa detectada; no se limpian huerfanos"',
+        '} else {',
+        '    $found = Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object {',
+        '        $_.CommandLine -and $_.CommandLine -like "*$pattern*"',
+        '    }',
+        '    if ($found) {',
+        '        foreach ($p in $found) {',
+        '            Write-Output "[glory-dev] Matando huerfano PID $($p.ProcessId) ($($p.Name))"',
+        '            & taskkill /PID $p.ProcessId /T /F 2>&1 | Out-Null',
+        '        }',
+        '    } else {',
+        '        Write-Output "[glory-dev] Sin huerfanos del target actual"',
+        '    }',
+        '}',
+    ].join('; ');
+    const result = spawnSync(
+        commandName('powershell'),
+        ['-NoProfile', '-Command', psScript],
+        { cwd: projectRoot, env: process.env, encoding: 'utf8', timeout: 20000 },
+    );
+    const output = (result.stdout || '').trim();
+    if (output && !output.includes('Sin huerfanos') && !output.includes('activa detectada')) {
+        process.stdout.write(`${output}\n`);
+    }
+    if (result.stderr && result.status !== 0) {
+        console.warn(`[glory-dev] Aviso limpieza huerfanos: ${result.stderr.trim()}`);
+    }
+}
+
 /* [256A-1c] Pre-limpieza: si el total de los targets conocidos excede el
  * límite, limpia antes de arrancar. `-Force` solo evita el bloqueo global;
  * `-ExcludeDirs` protege el target activo y los marcadores protegen otras
  * instancias. El script mantiene la whitelist dentro de C:\\tmp. */
+killStaleProjectProcesses(cargoTargetDir, binName);
 if (isWin && cargoCleanupTargets.some((targetDir) => existsSync(targetDir))) {
     const cleanScript = resolve(frameworkScriptDir, 'clean-cargo-target.ps1');
     if (existsSync(cleanScript)) {
