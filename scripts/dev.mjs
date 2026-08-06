@@ -7,7 +7,7 @@
 import { spawn, spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, readdirSync, unlinkSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { hostname, tmpdir } from 'node:os';
 import { dirname, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -59,6 +59,37 @@ const children = [];
 const devArgs = process.argv.slice(2);
 const syncFrontendOnly = devArgs.includes('--sync-frontend');
 const skipMigrations = process.env.GLORY_DEV_SKIP_MIGRATIONS === '1' || devArgs.includes('--skip-migrations');
+
+/* [028A-17 Fase 2] Visibilidad temprana de tomas de tarea ajenas. Este
+ * launcher es compartido entre proyectos glory-rs, así que NO importa el
+ * paquete quality del proyecto: lee el registro directamente y de forma
+ * defensiva (el registro es local del checkout, nunca bloquea el arranque).
+ * El agente que levanta dev debe ver si hay trabajo en paralelo de otros. */
+function printForeignTakeovers() {
+    const agent = (process.env.GLORY_AGENT_ID || '').trim() || hostname();
+    const registryRoot = join(projectRoot, '.quality-reports', 'task-takeover');
+    let names;
+    try {
+        names = readdirSync(registryRoot);
+    } catch {
+        return;
+    }
+    const nowMs = Date.now();
+    for (const name of names) {
+        if (!name.endsWith('.json')) continue;
+        let entry;
+        try {
+            entry = JSON.parse(readFileSync(join(registryRoot, name), 'utf8'));
+        } catch {
+            continue;
+        }
+        if (!entry || typeof entry.takenAtMs !== 'number') continue;
+        if (entry.takenBy === agent) continue;
+        const staleMs = 6 * 60 * 60 * 1000;
+        if (nowMs - entry.takenAtMs > staleMs) continue;
+        console.warn(`[task-takeover] EN CURSO por ${entry.takenBy}: ${entry.taskId} (${entry.id}) hasta ${entry.expiresAt}. No la trabajes en paralelo sin coordinar (npm run task:status).`);
+    }
+}
 
 function isWindowsPlatform() {
     return process.platform === 'win32';
@@ -575,6 +606,8 @@ const rustcWrapper = resolveRustcWrapper();
 if (rustcWrapper) {
     childEnv.RUSTC_WRAPPER = rustcWrapper;
 }
+
+printForeignTakeovers();
 
 console.log(`[glory-dev] Proyecto: ${projectRoot}`);
 console.log(`[glory-dev] Rama: ${branch}`);
