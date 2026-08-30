@@ -1,7 +1,7 @@
 param(
     [string[]]$TargetDirs = @('C:\tmp\glory-target', 'C:\tmp\glory-openapi-target'),
     [string[]]$ExcludeDirs = @(),
-    [int]$MaxTotalMB = 15360,
+    [int]$MaxTotalMB = 7168,
     # Se conserva por compatibilidad con invocaciones existentes; no desactiva
     # las salvaguardas de procesos activos ni la whitelist de C:\tmp.
     [switch]$Force,
