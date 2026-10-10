@@ -5,6 +5,7 @@
 import { ReactNode, useEffect, useRef } from 'react';
 import { X } from 'lucide-react';
 import { Boton } from './index';
+import { bloquearScrollDocumento } from '../../adapters/dom';
 import '../../estilos/Componentes.css';
 
 interface ModalProps {
@@ -24,11 +25,11 @@ function Modal({ abierto, onCerrar, titulo, children }: ModalProps) {
       if (e.key === 'Escape') onCerrar();
     };
     document.addEventListener('keydown', manejarEscape);
-    document.body.style.overflow = 'hidden';
+    const restaurarScroll = bloquearScrollDocumento();
 
     return () => {
       document.removeEventListener('keydown', manejarEscape);
-      document.body.style.overflow = '';
+      restaurarScroll();
     };
   }, [abierto, onCerrar]);
 
