@@ -8,7 +8,7 @@ import { spawn, spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, readdirSync, unlinkSync, writeFileSync } from 'node:fs';
 import { hostname, tmpdir } from 'node:os';
-import { dirname, join, relative, resolve, sep } from 'node:path';
+import { basename, dirname, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const frameworkScriptDir = dirname(fileURLToPath(import.meta.url));
@@ -20,7 +20,10 @@ const frontendPackageLock = resolve(frontendDir, 'package-lock.json');
 const frontendNodeModules = resolve(frontendDir, 'node_modules');
 const frontendInstallMarker = resolve(frontendNodeModules, '.glory-dev-install.json');
 const envPath = resolve(projectRoot, '.env');
-const cargoTargetBase = process.env.CARGO_TARGET_DIR_BASE || (isWindowsPlatform() ? 'C:\\tmp\\glory-target\\PROYECTO-TASKS' : resolve(tmpdir(), 'glory-target'));
+// Base de target por proyecto (carpeta del proyecto, no literal): cada consumidor
+// del framework obtiene su propio directorio sin tocar este archivo.
+const projectTargetName = basename(projectRoot).replace(/[^A-Za-z0-9_-]+/g, '-');
+const cargoTargetBase = process.env.CARGO_TARGET_DIR_BASE || (isWindowsPlatform() ? join('C:\\tmp\\glory-target', projectTargetName) : resolve(tmpdir(), 'glory-target'));
 const cargoTargetMaxMb = process.env.GLORY_CARGO_TARGET_MAX_MB || '15360';
 const cargoCleanIntervalSeconds = process.env.GLORY_CARGO_CLEAN_INTERVAL_SECONDS || '120';
 
