@@ -44,7 +44,7 @@
 /* Variantes boton */
 .botonPrimario {
   background-color: var(--colorAccento);
-  color: #fff;
+  color: var(--colorTextoInvertido, #fff);
 }
 
 .botonPrimario:hover:not(:disabled) {
@@ -59,25 +59,25 @@
 
 .botonSecundario:hover:not(:disabled) {
   background-color: var(--colorAccento);
-  color: #fff;
+  color: var(--colorTextoInvertido, #fff);
 }
 
 .botonPeligro {
   background-color: var(--colorPeligro);
-  color: #fff;
+  color: var(--colorTextoInvertido, #fff);
 }
 
 .botonPeligro:hover:not(:disabled) {
-  background-color: #c0392b;
+  background-color: var(--colorPeligroHover, #c0392b);
 }
 
 .botonExito {
   background-color: var(--colorExito);
-  color: #fff;
+  color: var(--colorTextoInvertido, #fff);
 }
 
 .botonExito:hover:not(:disabled) {
-  background-color: #00a381;
+  background-color: var(--colorExitoHover, #00a381);
 }
 
 .botonFantasma {
@@ -139,7 +139,7 @@
 
 .campoEntrada:focus {
   border-color: var(--colorAccento);
-  box-shadow: 0 0 0 3px rgba(15, 52, 96, 0.1);
+  box-shadow: 0 0 0 3px var(--sombraFoco, rgba(15, 52, 96, 0.1));
 }
 
 /* Tamanos campo */
@@ -164,7 +164,7 @@
 }
 
 .campoError .campoEntrada:focus {
-  box-shadow: 0 0 0 3px rgba(214, 48, 49, 0.1);
+  box-shadow: 0 0 0 3px var(--sombraFocoPeligro, rgba(214, 48, 49, 0.1));
 }
 
 .campoMensajeError {
@@ -177,7 +177,7 @@
 .modalOverlay {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.4);
+  background: var(--colorFondoOverlay, rgba(0, 0, 0, 0.4));
   display: flex;
   align-items: center;
   justify-content: center;
@@ -194,7 +194,7 @@
 .modalContenido {
   background: var(--colorFondoPanel);
   border-radius: calc(var(--radio) * 1.5);
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
+  box-shadow: var(--sombraModal, 0 8px 32px rgba(0, 0, 0, 0.12));
   width: 100%;
   max-width: 560px;
   max-height: 90vh;
